@@ -10,10 +10,10 @@ import viper.silver.components.StatefulComponent
 import viper.silicon.{Config, Map}
 import viper.silicon.state.terms._
 
-sealed abstract class Result
+sealed trait Result
 object Sat extends Result
 object Unsat extends Result
-object Unknown extends Result
+case class Unknown(reason: Option[String]) extends Result
 
 /* TODO: Should be generic, not hardcoded to Strings */
 trait ProverLike {
