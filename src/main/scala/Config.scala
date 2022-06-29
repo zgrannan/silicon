@@ -418,7 +418,7 @@ class Config(args: Seq[String]) extends SilFrontendConfig(args, "Silicon") {
 
     rawZ3Exe.toOption.getOrElse(
       envOrNone(Z3ProverStdIO.exeEnvironmentalVariable)
-        .getOrElse("z3" + (if (isWindows) ".exe" else "")))
+        .getOrElse("/run/current-system/sw/bin/z3" + (if (isWindows) ".exe" else "")))
   }
 
   private val rawCvc5Exe = opt[String]("cvc5Exe",

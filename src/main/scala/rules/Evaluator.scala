@@ -11,6 +11,7 @@ import viper.silver.verifier.{CounterexampleTransformer, PartialVerificationErro
 import viper.silver.verifier.errors.{ErrorWrapperWithExampleTransformer, PreconditionInAppFalse}
 import viper.silver.verifier.reasons._
 import viper.silicon.common.collections.immutable.InsertionOrderedSet
+import viper.silicon.decider.PathConditionStack
 import viper.silicon.interfaces._
 import viper.silicon.state.{terms, _}
 import viper.silicon.state.terms._
@@ -24,6 +25,8 @@ import viper.silicon.{Map, TriggerSets}
 import viper.silicon.interfaces.state.{ChunkIdentifer, NonQuantifiedChunk}
 import viper.silicon.logger.SymbExLogger
 import viper.silicon.logger.records.data.{CondExpRecord, EvaluateRecord, ImpliesRecord}
+import viper.silicon.resources.FieldID
+import viper.silver.ast.{AbstractLocalVar, FieldAccess, IntLit}
 
 /* TODO: With the current design w.r.t. parallelism, eval should never "move" an execution
  *       to a different verifier. Hence, consider not passing the verifier to continuations
@@ -80,11 +83,51 @@ object evaluator extends EvaluationRules {
         evals2(s1, es.tail, t :: ts, pvef, v1)(Q))
   }
 
+  def simplify(e: ast.Exp, heap: Heap, store: Store, pc: PathConditionStack) = {
+
+    val pcReplacements: Predef.Map[Term, Literal] = pc.assumptions.collect {
+      case Equals(t1, lit: Literal) if lit != Unit => t1 -> lit
+    }.toMap
+
+    // println(s"Replacements: $pcReplacements")
+    val reps: Predef.Map[(Term, String), Literal] = heap.values.collect {
+      case BasicChunk(FieldID, id, args, snap, _) if
+        pcReplacements.contains(snap) =>
+          // println(s"Corresponds: $snap <-> ${args.head}.${id} <-> ${pcReplacements(snap)}")
+          (args.head, id.name) -> pcReplacements(snap)
+    }.toMap
+
+    val result = e.transform {
+      case f@FieldAccess(abv: AbstractLocalVar, field) =>
+        store.get(abv) match {
+          case Some(term) =>
+            reps.get(term, field.name) match {
+              case Some(IntLiteral(n)) =>
+                // println(s"FOUND THING $n")
+                IntLit(n)()
+              case None => f
+            }
+          case None => f
+        }
+    }
+    if(e != result) {
+      println(s"TRANSFORM ${e} -> ${result}")
+    }
+    result
+
+  }
+
   /** Wrapper Method for eval, for logging. See Executor.scala for explanation of analogue. **/
   @inline
-  def eval(s: State, e: ast.Exp, pve: PartialVerificationError, v: Verifier)
+  def eval(s: State, e0: ast.Exp, pve: PartialVerificationError, v: Verifier)
           (Q: (State, Term, Verifier) => VerificationResult)
           : VerificationResult = {
+
+//    v.logger.info(s"Eval $e")
+//    v.logger.info(s"PC ${v.stateFormatter.format(v.decider.pcs)}")
+// v.logger.info(s"Heap ${v.stateFormatter.format(s.h)}")
+
+    val e = simplify(e0, s.h, s.g, v.decider.pcs)
 
     val sepIdentifier = SymbExLogger.currentLog().openScope(new EvaluateRecord(e, s, v.decider.pcs))
     eval3(s, e, pve, v)((s1, t, v1) => {
@@ -158,7 +201,10 @@ object evaluator extends EvaluationRules {
       case ast.EqCmp(e0, e1) => evalBinOp(s, e0, e1, Equals, pve, v)(Q)
       case ast.NeCmp(e0, e1) => evalBinOp(s, e0, e1, (p0: Term, p1: Term) => Not(Equals(p0, p1)), pve, v)(Q)
 
-      case x: ast.AbstractLocalVar => Q(s, s.g(x), v)
+      case x: ast.AbstractLocalVar => {
+        // v.logger.info(s"Abstract local $x: ${s.g(x)}")
+        Q(s, s.g(x), v)
+      }
 
       case _: ast.FullPerm => Q(s, FullPerm(), v)
       case _: ast.NoPerm => Q(s, NoPerm(), v)
@@ -291,6 +337,7 @@ object evaluator extends EvaluationRules {
       /* Short-circuiting evaluation of AND */
       case ae @ ast.And(_, _) =>
         val flattened = flattenOperator(ae, {case ast.And(e0, e1) => Seq(e0, e1)})
+        v.logger.info(s"Eval and $flattened")
         evalSeqShortCircuit(And, s, flattened, pve, v)(Q)
 
 

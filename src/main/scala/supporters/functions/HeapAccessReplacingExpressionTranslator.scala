@@ -149,6 +149,7 @@ class HeapAccessReplacingExpressionTranslator(symbolConverter: SymbolConverter,
         s.convert(sort)
       case None =>
         if (!failed && data.verificationFailures.isEmpty) {
+          throw new Exception(s"Couldn't get $key")
           val msg = resolutionFailureMessage(key, data)
 
           reporter report InternalWarningMessage(msg)

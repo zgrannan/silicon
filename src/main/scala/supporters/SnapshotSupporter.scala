@@ -17,10 +17,7 @@ import viper.silicon.verifier.Verifier
 trait SnapshotSupporter {
   def optimalSnapshotSort(a: ast.Exp, program: ast.Program): (Sort, Boolean)
 
-  def createSnapshotPair(s: State,
-                         sf: (Sort, Verifier) => Term,
-                         a0: ast.Exp,
-                         a1: ast.Exp,
+  def createSnapshotPair(sf: (Sort, Verifier) => Term,
                          v: Verifier)
                         : ((Sort, Verifier) => Term, (Sort, Verifier) => Term)
 }
@@ -97,14 +94,11 @@ class DefaultSnapshotSupporter(symbolConverter: SymbolConverter) extends Snapsho
     else (sorts.Snap, false)
   }
 
-  def createSnapshotPair(s: State,
-                         sf: (Sort, Verifier) => Term,
-                         a0: ast.Exp,
-                         a1: ast.Exp,
+  def createSnapshotPair(sf: (Sort, Verifier) => Term,
                          v: Verifier)
                         : ((Sort, Verifier) => Term, (Sort, Verifier) => Term) = {
 
-    val (snap0, snap1) = createSnapshotPair(s, sf(sorts.Snap, v), a0, a1, v)
+    val (snap0: Term, snap1: Term) = createSnapshotPair(sf(sorts.Snap, v), v)
 
     val sf0 = toSf(snap0)
     val sf1 = toSf(snap1)
@@ -112,38 +106,13 @@ class DefaultSnapshotSupporter(symbolConverter: SymbolConverter) extends Snapsho
     (sf0, sf1)
   }
 
-  private def createSnapshotPair(@unused s: State, snap: Term, @unused a0: ast.Exp, @unused a1: ast.Exp, v: Verifier): (Term, Term) = {
-    /* [2015-11-17 Malte] If both fresh snapshot terms and first/second datatypes
-     * are used, then the overall test suite verifies in 2min 10sec, whereas
-     * it takes 2min 20sec when only first/second datatypes are used. Might be
-     * worth re-benchmarking from time to time.
-     *
-     * [2017-06-30 Nils] The performance difference seems to be negligible.
-     * Using only first/second datatypes causes all/issues/carbon/0122.sil to fail,
-     * though. Silicon produces the same output as Carbon in that case.
-     *
-     * [2019-12-22 Malte] The larger and more complex Silicon's test suite gets, the less
-     * significant the performance difference becomes. I've therefore changed to implementation
-     * to use First(snap)/Second(snap) as the default.
-     */
+  private def createSnapshotPair(snap: Term, v: Verifier): (Term, Term) = {
 
     assert(snap != Unit, "Unit snapshot cannot be decomposed")
+    val snap0 = First(snap)
+    val snap1 = Second(snap)
 
-    val (snap0, snap1, snapshotEq) =
-      /* // [2019-12-22 Malte] Old code kept for documentation purposes
-      if (!s.conservingSnapshotGeneration) {
-        val snap0 = mkSnap(a0, Verifier.program, v)
-        val snap1 = mkSnap(a1, Verifier.program, v)
-
-        (snap0, snap1, snap === Combine(snap0, snap1))
-      } else*/ {
-        val snap0 = First(snap)
-        val snap1 = Second(snap)
-
-        (snap0, snap1, snap === Combine(snap0, snap1))
-      }
-
-    v.decider.assume(snapshotEq)
+    v.decider.assume(snap === Combine(snap0, snap1))
 
     (snap0, snap1)
   }

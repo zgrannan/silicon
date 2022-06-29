@@ -204,6 +204,7 @@ trait DefaultFunctionVerificationUnitProvider extends VerifierComponent { v: Ver
       val data = functionData(function)
       val pres = function.pres
       val posts = function.posts
+      println(s"Args: ${data.formalArgs}, Result: ${function.result} ")
       val g = Store(data.formalArgs + (function.result -> data.formalResult))
       val s = sInit.copy(g = g, h = Heap(), oldHeaps = OldHeaps())
 

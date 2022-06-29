@@ -28,8 +28,12 @@ trait StoreFactory[ST <: Store] {
 
 object Store extends StoreFactory[MapBackedStore] {
   def apply() = new MapBackedStore(Map.empty)
-  def apply(pair: (AbstractLocalVar, Term)) = new MapBackedStore(Map(pair))
-  def apply(bindings: Map[AbstractLocalVar, Term]) = new MapBackedStore(toMap(bindings))
+  def apply(pair: (AbstractLocalVar, Term)) = {
+    new MapBackedStore(Map(pair))
+  }
+  def apply(bindings: Map[AbstractLocalVar, Term]) = {
+    new MapBackedStore(toMap(bindings))
+  }
   def apply(bindings: Iterable[(AbstractLocalVar, Term)]) = new MapBackedStore(toMap(bindings))
 }
 
@@ -39,6 +43,9 @@ final class MapBackedStore private[state] (map: Map[ast.AbstractLocalVar, Term])
   val values = map
   def apply(key: ast.AbstractLocalVar) = map(key)
   def get(key: ast.AbstractLocalVar) = map.get(key)
-  def +(entry: (ast.AbstractLocalVar, Term)) = new MapBackedStore(map + entry)
+  def +(entry: (ast.AbstractLocalVar, Term)) = {
+    // println(s"Add entry $entry")
+    new MapBackedStore(map + entry)
+  }
   def +(other: Store) = new MapBackedStore(map ++ other.values)
 }

@@ -147,12 +147,7 @@ object producer extends ProductionRules {
         wrappedProduceTlc(s, sf, a, pve, v)(Q)
       else {
         val (sf0, sf1) =
-          v.snapshotSupporter.createSnapshotPair(s, sf, a, viper.silicon.utils.ast.BigAnd(as.tail), v)
-          /* TODO: Refactor createSnapshotPair s.t. it can be used with Seq[Exp],
-           *       then remove use of BigAnd; for one it is not efficient since
-           *       the tail of the (decreasing list parameter as) is BigAnd-ed
-           *       over and over again.
-           */
+          v.snapshotSupporter.createSnapshotPair(sf, v)
 
         wrappedProduceTlc(s, sf0, a, pve, v)((s1, v1) =>
           produceTlcs(s1, sf1, as.tail, pves.tail, v1)(Q))
