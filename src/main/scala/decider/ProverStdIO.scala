@@ -249,18 +249,10 @@ abstract class ProverStdIO(uniqueId: String,
     writeLine("(assert (not " + goal + "))")
     readSuccess()
 
-    val startTime = System.currentTimeMillis()
-    writeLine("(check-sat)")
-    val result = readUnsat()
-    val endTime = System.currentTimeMillis()
-
-    if (!result) {
-      retrieveAndSaveModel()
-    }
-
+    val result = checkUnsatAndReturnTime()
     pop()
 
-    (result, endTime - startTime)
+    result
   }
 
   def saturate(data: Option[Config.ProverStateSaturationTimeout]): Unit = {
@@ -289,34 +281,52 @@ abstract class ProverStdIO(uniqueId: String,
     }
   }
 
+  private def checkUnsatAndReturnTime(
+     checkSatCommand: String = "(check-sat)"
+  ) = {
+    val startTime = System.currentTimeMillis()
+    writeLine(checkSatCommand)
+    val result = getCheckSatResult()
+    val endTime = System.currentTimeMillis()
+
+    if (result == Sat) {
+      retrieveAndSaveModel()
+    }
+
+    (result == Unsat, endTime - startTime)
+  }
+
   protected def assertUsingSoftConstraints(goal: String): (Boolean, Long) = {
     val guard = fresh("grd", Nil, sorts.Bool)
 
     writeLine(s"(assert (=> $guard (not $goal)))")
     readSuccess()
 
-    val startTime = System.currentTimeMillis()
-    writeLine(s"(check-sat $guard)")
-    val result = readUnsat()
-    val endTime = System.currentTimeMillis()
-
-    if (!result) {
-      retrieveAndSaveModel()
-    }
-
-    (result, endTime - startTime)
+    checkUnsatAndReturnTime(s"(check-sat $guard)")
   }
 
   def check(timeout: Option[Int] = None): Result = {
     setTimeout(timeout)
 
     writeLine("(check-sat)")
+    getCheckSatResult()
+  }
 
-    readLine() match {
-      case "sat" => Sat
-      case "unsat" => Unsat
-      case "unknown" => Unknown
-    }
+  private def getCheckSatResult(): Result = readLine() match {
+    case "unsat" => Unsat
+    case "sat" => Sat
+    case "unknown" =>
+      writeLine("(get-info :reason-unknown)")
+      val result = readLine()
+      result match {
+        case "unsupported" =>
+          Unknown(None)
+        case reason =>
+          println(s"Reason unknown: $reason")
+          Unknown(Some(reason))
+      }
+    case result =>
+      throw ProverInteractionFailed(uniqueId, s"Unexpected output of prover while trying to refute an assertion: $result")
   }
 
   def statistics(): Map[String, String] = {
@@ -385,15 +395,6 @@ abstract class ProverStdIO(uniqueId: String,
 
     if (answer != "success")
       throw ProverInteractionFailed(uniqueId, s"Unexpected output of prover. Expected 'success' but found: $answer")
-  }
-
-  protected def readUnsat(): Boolean = readLine() match {
-    case "unsat" => true
-    case "sat" => false
-    case "unknown" => false
-
-    case result =>
-      throw ProverInteractionFailed(uniqueId, s"Unexpected output of prover while trying to refute an assertion: $result")
   }
 
   protected def readModel(separator: String): String = {
