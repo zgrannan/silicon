@@ -83,27 +83,78 @@ object evaluator extends EvaluationRules {
         evals2(s1, es.tail, t :: ts, pvef, v1)(Q))
   }
 
-  def simplify(e: ast.Exp, heap: Heap, store: Store, pc: PathConditionStack) = {
+  def lookupConst(e: ast.Exp, s: State, pc: PathConditionStack) = {
+    val pcReplacements: Predef.Map[Term, Literal] = pc.assumptions.collect {
+      case Equals(t1, lit: Literal) if lit != Unit => t1 -> lit
+    }.toMap
+
+    val repsList = s.h.values.collect {
+      case BasicChunk(FieldID, id, args, snap, _) if
+        pcReplacements.contains(snap) =>
+        // println(s"Corresponds: $snap <-> ${args.head}.${id} <-> ${pcReplacements(snap)}")
+        (args.head, id.name) -> (snap, pcReplacements(snap))
+    }.toList
+
+    if(repsList.length > 1) {
+      ???
+    }
+
+    val reps = repsList.toMap
+
+    e match {
+      case f@FieldAccess(abv: AbstractLocalVar, field) =>
+        s.g.get(abv) match {
+          case Some(term) =>
+            reps.get(term, field.name) match {
+              case Some((snap, IntLiteral(n))) =>
+                 println(s"$e -> $n")
+                //                recorder = recorder.recordSnapshot(
+                //                  f,
+                //                  pc.branchConditions,
+                //                  snap
+                //                )
+                Some(IntLiteral(n))
+              case _ => None
+            }
+          case None => None
+        }
+      case _ => None
+    }
+
+  }
+
+  def simplify(e: ast.Exp, s: State, pc: PathConditionStack) = {
 
     val pcReplacements: Predef.Map[Term, Literal] = pc.assumptions.collect {
       case Equals(t1, lit: Literal) if lit != Unit => t1 -> lit
     }.toMap
 
     // println(s"Replacements: $pcReplacements")
-    val reps: Predef.Map[(Term, String), Literal] = heap.values.collect {
+    val repsList = s.h.values.collect {
       case BasicChunk(FieldID, id, args, snap, _) if
         pcReplacements.contains(snap) =>
           // println(s"Corresponds: $snap <-> ${args.head}.${id} <-> ${pcReplacements(snap)}")
-          (args.head, id.name) -> pcReplacements(snap)
-    }.toMap
+          (args.head, id.name) -> (snap, pcReplacements(snap))
+    }.toList
+    if(repsList.length > 1) {
+      ???
+    }
+    val reps = repsList.toMap
+
+    // var recorder = s.functionRecorder
 
     val result = e.transform {
       case f@FieldAccess(abv: AbstractLocalVar, field) =>
-        store.get(abv) match {
+        s.g.get(abv) match {
           case Some(term) =>
             reps.get(term, field.name) match {
-              case Some(IntLiteral(n)) =>
+              case Some((snap, IntLiteral(n))) =>
                 // println(s"FOUND THING $n")
+//                recorder = recorder.recordSnapshot(
+//                  f,
+//                  pc.branchConditions,
+//                  snap
+//                )
                 IntLit(n)()
               case None => f
             }
@@ -111,7 +162,7 @@ object evaluator extends EvaluationRules {
         }
     }
     if(e != result) {
-      println(s"TRANSFORM ${e} -> ${result}")
+      // println(s"TRANSFORM ${e} -> ${result}")
     }
     result
 
@@ -119,7 +170,7 @@ object evaluator extends EvaluationRules {
 
   /** Wrapper Method for eval, for logging. See Executor.scala for explanation of analogue. **/
   @inline
-  def eval(s: State, e0: ast.Exp, pve: PartialVerificationError, v: Verifier)
+  def eval(s0: State, e0: ast.Exp, pve: PartialVerificationError, v: Verifier)
           (Q: (State, Term, Verifier) => VerificationResult)
           : VerificationResult = {
 
@@ -127,7 +178,7 @@ object evaluator extends EvaluationRules {
 //    v.logger.info(s"PC ${v.stateFormatter.format(v.decider.pcs)}")
 // v.logger.info(s"Heap ${v.stateFormatter.format(s.h)}")
 
-    val e = simplify(e0, s.h, s.g, v.decider.pcs)
+    val (e, s) = (e0, s0)
 
     val sepIdentifier = SymbExLogger.currentLog().openScope(new EvaluateRecord(e, s, v.decider.pcs))
     eval3(s, e, pve, v)((s1, t, v1) => {
@@ -304,7 +355,7 @@ object evaluator extends EvaluationRules {
           chunkSupporter.lookup(s1, s1.h, resource, tArgs, ve, v1)((s2, h2, tSnap, v2) => {
             val fr = s2.functionRecorder.recordSnapshot(fa, v2.decider.pcs.branchConditions, tSnap)
             val s3 = s2.copy(h = h2, functionRecorder = fr)
-            Q(s3, tSnap, v1)
+            Q(s3, lookupConst(fa, s2, v2.decider.pcs).getOrElse(tSnap), v2)
           })
         })
 

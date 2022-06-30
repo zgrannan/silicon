@@ -106,7 +106,10 @@ case class ActualFunctionRecorder(private val _data: FunctionData,
     }
   }
 
-  def locToSnap: Map[ast.LocationAccess, Term] = exprToSnap(locToSnaps)
+  def locToSnap: Map[ast.LocationAccess, Term] = {
+    println(s"Locs: $locToSnaps")
+    exprToSnap(locToSnaps)
+  }
   def fappToSnap: Map[ast.FuncApp, Term] = exprToSnap(fappToSnaps)
 
   private def recordExpressionSnapshot[E <: ast.Exp]
@@ -119,8 +122,10 @@ case class ActualFunctionRecorder(private val _data: FunctionData,
     if (depth == 0) {
       val guardsToSnaps = recordings.getOrElse(loc, InsertionOrderedSet()) + (guards -> snap)
 
+      println(s"DO RECORDING $loc (depth == 0) $guardsToSnaps")
       Some(recordings + (loc -> guardsToSnaps))
     } else {
+      println(s"NOT RECORDING $loc (depth != 0)")
       None
     }
   }
@@ -128,6 +133,10 @@ case class ActualFunctionRecorder(private val _data: FunctionData,
   def recordSnapshot(loc: ast.LocationAccess, guards: Stack[Term], snap: Term)
                     : ActualFunctionRecorder = {
 
+    println(s"Record snapshot: $loc")
+    if(loc.toString == "self.enum_Thing30.f$0.val_int") {
+      /// throw new Exception("WAT")
+    }
     recordExpressionSnapshot(loc, guards, snap, locToSnaps)
       .fold(this)(updatedLocToSnaps => copy(locToSnaps = updatedLocToSnaps))
   }

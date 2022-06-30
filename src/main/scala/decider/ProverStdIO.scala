@@ -322,7 +322,6 @@ abstract class ProverStdIO(uniqueId: String,
         case "unsupported" =>
           Unknown(None)
         case reason =>
-          println(s"Reason unknown: $reason")
           Unknown(Some(reason))
       }
     case result =>
